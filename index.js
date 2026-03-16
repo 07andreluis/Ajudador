@@ -3,8 +3,9 @@ const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder
 const mongoose = require('mongoose');
 const http = require('http'); // Adicionado para o Keep-Alive
 
-// --- MINI SERVIDOR PARA O RENDER NÃO DORMIR ---
-http.createServer((req, res) => {
+// --- SERVIDOR PARA RECEBER O CRON-JOB ---
+http.createServer((_, res) => {
+    res.writeHead(200, {'Content-Type': 'text/plain'});
     res.write("Bot da Torre Online!");
     res.end();
 }).listen(process.env.PORT || 3000);
@@ -39,29 +40,26 @@ const client = new Client({
 });
 
 const CONFIG_TORRE = {
-    'HP': { limite: 2, emoji: '💉' },
+    'HP': { limite: 2, emoji: '✝️' },
     'Sniper': { limite: 4, emoji: '🏹' },
     'Devo': { limite: 1, emoji: '🛡️' },
-    'Champ CF': { limite: 1, emoji: '🖐' },
+    'Champ CF': { limite: 1, emoji: '💪' },
     'Champ Asura': { limite: 1, emoji: '👊' },
-    'Professor': { limite: 1, emoji: '📖' },
-    'Bragi': { limite: 1, emoji: '🎹' },
+    'Professor': { limite: 1, emoji: '📚' },
+    'Bragi': { limite: 1, emoji: '🎻' },
     'Dancer': { limite: 1, emoji: '💃' },
     'Creator': { limite: 1, emoji: '🧪' }
 };
 
 function calcularContagem(dataEvento) {
-    if (!dataEvento) return "Data não definida.";
+    if (!dataEvento) return "📅 **Data ainda não definida.** Use `!data DD/MM/AAAA HH:MM`";
     
-    const agora = new Date();
-    const diff = dataEvento - agora;
+    // O Discord usa o tempo em segundos, não milissegundos
+    const timestampUnix = Math.floor(dataEvento.getTime() / 1000);
 
-    if (diff <= 0) return "🚀 **O evento já começou ou aconteceu!**";
-
-    const horas = Math.floor(diff / (1000 * 60 * 60));
-    const minutos = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-
-    return `⏳ Faltam **${horas}h e ${minutos}m** para o início.`;
+    // R: Relativo (ex: "em 2 horas" ou "há 10 minutos")
+    // F: Data Completa (ex: "20 de março de 2026 21:00")
+    return `📌 **Início:** <t:${timestampUnix}:F>\n⏳ **Contagem:** <t:${timestampUnix}:R>`;
 }
 
 async function getDadosTorre(idDoCanal) {
@@ -81,11 +79,28 @@ async function getDadosTorre(idDoCanal) {
 async function gerarEmbed(idDoCanal) {
     const dados = await getDadosTorre(idDoCanal);
     const contagemTexto = calcularContagem(dados.dataEvento);
+    
+    // Lógica de Cores Dinâmicas
+    let corEmbed = '#2b2d31'; // Cor padrão (Cinza escuro)
+    
+    if (dados.dataEvento) {
+        const agora = new Date();
+        const diff = dados.dataEvento - agora;
+        const duasHoras = 2 * 60 * 60 * 1000; // 2 horas em milissegundos
+
+        if (diff <= 0) {
+            corEmbed = '#ff0000'; // Vermelho (Evento já começou/atrasado)
+        } else if (diff <= duasHoras) {
+            corEmbed = '#f1c40f'; // Amarelo (Falta menos de 2h - Atenção!)
+        } else {
+            corEmbed = '#3498db'; // Azul (Tudo sob controle)
+        }
+    }
 
     const embed = new EmbedBuilder()
         .setTitle('🏰 Torre Sem Fim - Inscrição')
         .setDescription(`${contagemTexto}\n\nSelecione sua classe abaixo. Esta lista é exclusiva para este tópico!`)
-        .setColor(dados.dataEvento && (dados.dataEvento - new Date() > 0) ? '#5865F2' : '#2b2d31')
+        .setColor(corEmbed) // Aplica a cor definida acima
         .setFooter({ text: `ID do Evento: ${idDoCanal}` });
 
     for (const [classe, info] of Object.entries(CONFIG_TORRE)) {
@@ -134,32 +149,76 @@ client.on('messageCreate', async message => {
         const embed = await gerarEmbed(message.channel.id);
         await message.channel.send({ embeds: [embed], components: gerarBotoes() });
     }
+    // COMANDO: !remover @usuario (Apenas Admin)
+    if (message.content.startsWith('!remover')) {
+    // 1. Verifica se quem enviou é administrador
+        if (!message.member.permissions.has('Administrator')) {
+        // Apaga a tentativa de comando de quem não é admin para não sujar o chat
+            setTimeout(() => message.delete().catch(() => {}), 1000);
+            return message.reply({ content: 'Apenas administradores podem remover membros.', flags: [64] });
+        }
 
+        const usuarioParaRemover = message.mentions.users.first();
+        if (!usuarioParaRemover) {
+            return message.reply('Marque o usuário que deseja remover. Ex: `!remover @Nick`');
+        }
+
+        const userIdRemover = `<@${usuarioParaRemover.id}>`;
+        const dados = await getDadosTorre(message.channel.id);
+        let removido = false;
+
+        // 2. Procura o usuário em todas as classes
+        for (let [classe, lista] of dados.inscritos) {
+            if (lista.includes(userIdRemover)) {
+                dados.inscritos.set(classe, lista.filter(id => id !== userIdRemover));
+                removido = true;
+            }
+        }
+
+        if (removido) {
+            await dados.save();
+        
+            // 3. Gera o novo embed atualizado
+            const embed = await gerarEmbed(message.channel.id);
+        
+            // 4. Envia a confirmação e o novo painel
+            await message.channel.send({ 
+                content: `✅ ${usuarioParaRemover} foi removido da lista pelo administrador.`, 
+                embeds: [embed], 
+                components: gerarBotoes() 
+            });
+
+            // 5. Apaga o comando !remover para manter o chat limpo
+            await message.delete().catch(err => console.error("Erro ao apagar mensagem:", err));
+        
+        } else {
+            message.reply('Este usuário não está inscrito em nenhuma classe neste tópico.');
+        }
+    }
+    
     // COMANDO: !data DD/MM/AAAA HH:MM
     if (message.content.startsWith('!data')) {
         const args = message.content.split(' ');
-        if (args.length < 3) {
-            return message.reply('Use o formato: `!data DD/MM/AAAA HH:MM`');
-        }
+        if (args.length < 3) return message.reply('Use: `!data DD/MM/AAAA HH:MM`');
 
-        const dataString = args[1]; // DD/MM/AAAA
-        const horaString = args[2]; // HH:MM
+        const [dia, mes, ano] = args[1].split('/');
+        const [hora, min] = args[2].split(':');
 
-        const [dia, mes, ano] = dataString.split('/');
-        const [hora, min] = horaString.split(':');
-
-        // Criar data (Mês no JS começa em 0, então mes - 1)
-        const novaData = new Date(ano, mes - 1, dia, hora, min);
+        // Criamos a data forçando o fuso horário de Brasília/Piauí
+        const dataString = `${ano}-${mes}-${dia}T${hora}:${min}:00-03:00`;
+        const novaData = new Date(dataString);
 
         if (isNaN(novaData)) {
-            return message.reply('Data ou hora inválida! Verifique o formato DD/MM/AAAA HH:MM');
+            return message.reply('❌ Formato inválido! Use DD/MM/AAAA HH:MM');
         }
 
         const dados = await getDadosTorre(message.channel.id);
         dados.dataEvento = novaData;
         await dados.save();
 
-        message.reply(`✅ Horário do evento definido para: **${novaData.toLocaleString('pt-BR')}**! Digite \`!torre\` para ver a lista atualizada.`);
+        message.reply(`✅ Evento marcado! O cronômetro no \`!torre\` agora atualizará em tempo real.`);
+        // Apaga o comando !data para limpar o chat
+        setTimeout(() => message.delete().catch(() => {}), 2000);
     }
 });
 
@@ -208,18 +267,5 @@ client.on('interactionCreate', async interaction => {
 
     await interaction.update({ embeds: [await gerarEmbed(canalId)] });
 });
-
-// --- ESTRATÉGIA DE AUTO-PING PARA O RENDER ---
-const URL_DO_MEU_BOT = "https://organizador-dsss.onrender.com";
-
-setInterval(() => {
-    http.get(URL_DO_MEU_BOT, (res) => {
-        if (res.statusCode === 200) {
-            console.log("⚓ Auto-Ping realizado com sucesso: Bot acordado!");
-        }
-    }).on('error', (err) => {
-        console.error("❌ Erro no Auto-Ping interno: " + err.message);
-    });
-}, 600000); // 600.000ms = 10 minutos
 
 client.login(process.env.DISCORD_TOKEN);
