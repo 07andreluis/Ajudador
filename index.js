@@ -48,7 +48,8 @@ const CONFIG_TORRE = {
     'Professor': { limite: 1, emoji: '📚' },
     'Bragi': { limite: 1, emoji: '🎻' },
     'Dancer': { limite: 1, emoji: '💃' },
-    'Creator': { limite: 1, emoji: '🧪' }
+    'Creator': { limite: 1, emoji: '🧪' },
+    'Reserva': { limite: 12, emoji: '⏳'}
 };
 
 function calcularContagem(dataEvento) {
@@ -106,11 +107,22 @@ async function gerarEmbed(idDoCanal) {
     for (const [classe, info] of Object.entries(CONFIG_TORRE)) {
         const listaIds = dados.inscritos.get(classe) || [];
         const listaNomes = listaIds.length > 0 ? listaIds.join('\n') : '*Vazio*';
-        embed.addFields({ 
-            name: `${info.emoji} ${classe} (${listaIds.length}/${info.limite})`, 
-            value: listaNomes, 
-            inline: true 
-        });
+
+        // Se for a Reserva, adicionamos um campo vazio antes para criar uma separação visual
+        if (classe === 'Reserva') {
+            embed.addFields({ name: '\u200B', value: '------------------------------------------', inline: false });
+            embed.addFields({ 
+                name: `⏳ FILA DE ESPERA (${listaIds.length}/${info.limite})`, 
+                value: listaNomes, 
+                inline: false // Ocupa a linha toda para destaque
+            });
+        } else {
+            embed.addFields({ 
+                name: `${info.emoji} ${classe} (${listaIds.length}/${info.limite})`, 
+                value: listaNomes, 
+                inline: true 
+            });
+        }
     }
     return embed;
 }
