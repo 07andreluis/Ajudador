@@ -77,38 +77,40 @@ async function verificarAlertas() {
     const eventos = await Torre.find({ dataEvento: { $ne: null } });
 
     for (const evento of eventos) {
-        const diffHoras = (evento.dataEvento - agora) / (1000 * 60 * 60);
-        const diffMinutos = (evento.dataEvento - agora) / (1000 * 60);
+        // 1. Usar minutos para maior precisão
+        const diffMinutos = Math.floor((evento.dataEvento - agora) / (1000 * 60));
 
-        // Definição dos gatilhos (Tempo em horas, Nome do Alerta)
         const gatilhos = [
-            { t: 24, nome: '24h' },
-            { t: 10, nome: '10h' },
-            { t: 5, nome: '5h' },
-            { t: 2, nome: '2h' },
-            { t: 1, nome: '1h' },
-            { t: 0.5, nome: '30min' }
+            { m: 1440, nome: '24h' },
+            { m: 600,  nome: '10h' },
+            { m: 300,  nome: '5h' },
+            { m: 120,  nome: '2h' },
+            { m: 60,   nome: '1h' },
+            { m: 30,   nome: '30min' }
         ];
 
         for (const g of gatilhos) {
-            // Se estiver no tempo e ainda não enviou esse alerta
-            if (diffHoras <= g.t && diffHoras > 0 && !evento.alertasEnviados.includes(g.nome)) {
-                
-                const canal = await client.channels.fetch(evento.eventoId);
+        // A CONDIÇÃO: Menor que o gatilho, maior que zero e não enviado ainda
+            if (diffMinutos <= g.m && diffMinutos > 0 && !evento.alertasEnviados.includes(g.nome)) {
+            
+                const canal = await client.channels.fetch(evento.eventoId).catch(() => null);
                 if (canal) {
-                    // Coleta todos os IDs de quem está inscrito para marcar
                     let mencoes = "";
-                    evento.inscritos.forEach(lista => {
-                        lista.forEach(id => { mencoes += `${id} `; });
-                    });
+                    // Forma segura de ler o Map de inscritos
+                    for (const [classe, lista] of evento.inscritos) {
+                        lista.forEach(id => {
+                            if (!mencoes.includes(id)) mencoes += `${id} `;
+                        });
+                    }
 
+                    // Envia a notificação
                     await canal.send(`🔔 **ALERTA ${g.nome.toUpperCase()}!** Preparem os itens!\n${mencoes}`);
-                    
-                    // Envia o checklist que criamos antes
-                    const embedCheck = await gerarEmbedChecklist(); // Função que cria o embed do post anterior
+                
+                    // Envia o checklist
+                    const embedCheck = await gerarEmbedChecklist();
                     await canal.send({ embeds: [embedCheck] });
 
-                    // Marca como enviado
+                    // Salva o alerta como enviado
                     evento.alertasEnviados.push(g.nome);
                     await evento.save();
                 }
@@ -445,7 +447,7 @@ client.on('messageCreate', async message => {
                 },
                 { 
                     name: '🧪 Consumíveis Gerais', 
-                    value: '• 25 Panaceas | 10 Ygg Leafs | 15 Scrolls de Mercenário\n' +
+                    value: '• 25 Panaceas | 10 Ygg Leafs | 15 Scrolls de Mercenário (level 1 já serve)\n' +
                            '• Itens de HP/SP e 500k em Zeny para gastos locais.\n' +
                            '📍 *Scrolls: /navi prontera 42/336*'
                 },
