@@ -313,20 +313,27 @@ client.on('interactionCreate', async interaction => {
 
     const classeEscolhida = interaction.customId.replace('insc_', '');
     const info = CONFIG_TORRE[classeEscolhida];
+    
+    if (!dados.inscritos.has(classeEscolhida)) {
+        dados.inscritos.set(classeEscolhida, []);
+    }
+    
     const listaAtual = dados.inscritos.get(classeEscolhida);
 
     let jaInscrito = false;
     for (let lista of dados.inscritos.values()) {
-        if (lista.includes(userId)) jaInscrito = true;
+        if (Array.isArray(lista) && lista.includes(userId)) jaInscrito = true;
     }
 
     if (jaInscrito) return interaction.reply({ content: 'Você já está em uma classe neste tópico!', ephemeral: true });
+    
     if (listaAtual.length >= info.limite) return interaction.reply({ content: 'Esta classe já está cheia!', ephemeral: true });
 
     listaAtual.push(userId);
     dados.inscritos.set(classeEscolhida, listaAtual);
+    
+    // Salva e atualiza
     await dados.save();
-
     await interaction.update({ embeds: [await gerarEmbed(canalId)] });
 });
 
