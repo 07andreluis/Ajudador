@@ -108,12 +108,10 @@ async function gerarEmbed(idDoCanal) {
 
     for (const classe of chavesClasses) {
         const info = CONFIG_TORRE[classe];
-        // Busca os inscritos no Map do banco de dados
-        const listaIds = dados.inscritos.get(classe) || [];
+        const listaIds = (dados.inscritos && dados.inscritos.get(classe)) || [];
         const listaNomes = listaIds.length > 0 ? listaIds.join('\n') : '*Vazio*';
 
         if (classe === 'Reserva') {
-            // Adiciona uma linha de separação antes da reserva
             embed.addFields({ name: '\u200B', value: '━━━━━━━━━━━━━━━━━━━━━━━━━━', inline: false });
             embed.addFields({ 
                 name: `⏳ FILA DE ESPERA (${listaIds.length}/${info.limite})`, 
