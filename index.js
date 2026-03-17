@@ -19,6 +19,7 @@ mongoose.connect(process.env.MONGO_URI)
 const TorreSchema = new mongoose.Schema({
     eventoId: { type: String, required: true },
     dataEvento: { type: Date, default: null },
+    ultimaMensagemId: { type: String, default: null },
     inscritos: {
         type: Map,
         of: [String],
@@ -182,14 +183,39 @@ async function limparEventosAntigos() {
     });
 }
 
+async function enviarPainelAtualizado(channel, canalId) {
+    const dados = await getDadosTorre(canalId);
+
+    // 1. Tenta apagar a mensagem anterior se ela existir
+    if (dados.ultimaMensagemId) {
+        try {
+            const msgAntiga = await channel.messages.fetch(dados.ultimaMensagemId);
+            if (msgAntiga) await msgAntiga.delete();
+        } catch (err) {
+            // Ignora erro se a mensagem já foi apagada manualmente
+        }
+    }
+
+    // 2. Envia o novo painel
+    const embed = await gerarEmbed(canalId);
+    const novaMsg = await channel.send({ 
+        embeds: [embed], 
+        components: gerarBotoes() 
+    });
+
+    // 3. Salva o ID da nova mensagem no banco
+    dados.ultimaMensagemId = novaMsg.id;
+    await dados.save();
+}
+
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
 
     // Comando !torre com Faxina Automática
     if (message.content === '!torre') {
-        await limparEventosAntigos(); // Limpa o lixo antes de mostrar a nova
-        const embed = await gerarEmbed(message.channel.id);
-        await message.channel.send({ embeds: [embed], components: gerarBotoes() });
+        await limparEventosAntigos();
+        await enviarPainelAtualizado(message.channel, message.channel.id);
+        await message.delete().catch(() => {}); // Apaga o "!torre" do usuário
     }
 
     // COMANDO: !adicionar @usuario Classe
@@ -240,13 +266,8 @@ client.on('messageCreate', async message => {
         listaDestino.push(userIdAlvo);
         dados.inscritos.set(classeValida, listaDestino);
         await dados.save();
-
-        const embed = await gerarEmbed(message.channel.id);
-        await message.channel.send({ 
-            content: `✅ ${usuarioAlvo} foi adicionado à vaga de **${classeValida}** por ${message.author}.`, 
-            embeds: [embed], 
-            components: gerarBotoes() 
-        });
+        await enviarPainelAtualizado(message.channel, message.channel.id);
+        await message.delete().catch(() => {});
     }
 
     // Comando !remover @usuario (Com permissão flexível)
@@ -280,12 +301,7 @@ client.on('messageCreate', async message => {
 
         if (removido) {
             await dados.save();
-            const embed = await gerarEmbed(message.channel.id);
-            await message.channel.send({ 
-                content: `✅ ${usuarioParaRemover} foi removido por ${message.author}.`, 
-                embeds: [embed], 
-                components: gerarBotoes() 
-            });
+            await enviarPainelAtualizado(message.channel, message.channel.id);
             await message.delete().catch(() => {});
         } else {
             message.reply('Este usuário não está na lista.');
