@@ -4,10 +4,17 @@ const mongoose = require('mongoose');
 const http = require('http'); // Adicionado para o Keep-Alive
 
 // --- SERVIDOR PARA RECEBER O CRON-JOB ---
-http.createServer((_, res) => {
-    res.writeHead(200, {'Content-Type': 'text/plain'});
-    res.write("Bot da Torre Online!");
-    res.end();
+http.createServer(async (_, res) => {
+    try {
+        await verificarAlertas(); 
+        res.writeHead(200, {'Content-Type': 'text/plain'});
+        res.write("Sistema de Alertas Processado!");
+        res.end();
+    } catch (err) {
+        console.error("Erro no processamento do Cron:", err);
+        res.writeHead(500);
+        res.end();
+    }
 }).listen(process.env.PORT || 3000);
 
 // Conexão com o MongoDB
@@ -19,6 +26,7 @@ mongoose.connect(process.env.MONGO_URI)
 const TorreSchema = new mongoose.Schema({
     eventoId: { type: String, required: true },
     dataEvento: { type: Date, default: null },
+    alertasEnviados: { type: [String], default: [] },
     ultimaMensagemId: { type: String, default: null },
     inscritos: {
         type: Map,
@@ -62,6 +70,51 @@ function calcularContagem(dataEvento) {
     // R: Relativo (ex: "em 2 horas" ou "há 10 minutos")
     // F: Data Completa (ex: "20 de março de 2026 21:00")
     return `📌 **Início:** <t:${timestampUnix}:F>\n⏳ **Contagem:** <t:${timestampUnix}:R>`;
+}
+
+async function verificarAlertas() {
+    const agora = new Date();
+    const eventos = await Torre.find({ dataEvento: { $ne: null } });
+
+    for (const evento of eventos) {
+        const diffHoras = (evento.dataEvento - agora) / (1000 * 60 * 60);
+        const diffMinutos = (evento.dataEvento - agora) / (1000 * 60);
+
+        // Definição dos gatilhos (Tempo em horas, Nome do Alerta)
+        const gatilhos = [
+            { t: 24, nome: '24h' },
+            { t: 10, nome: '10h' },
+            { t: 5, nome: '5h' },
+            { t: 2, nome: '2h' },
+            { t: 1, nome: '1h' },
+            { t: 0.5, nome: '30min' }
+        ];
+
+        for (const g of gatilhos) {
+            // Se estiver no tempo e ainda não enviou esse alerta
+            if (diffHoras <= g.t && diffHoras > 0 && !evento.alertasEnviados.includes(g.nome)) {
+                
+                const canal = await client.channels.fetch(evento.eventoId);
+                if (canal) {
+                    // Coleta todos os IDs de quem está inscrito para marcar
+                    let mencoes = "";
+                    evento.inscritos.forEach(lista => {
+                        lista.forEach(id => { mencoes += `${id} `; });
+                    });
+
+                    await canal.send(`🔔 **ALERTA ${g.nome.toUpperCase()}!** Preparem os itens!\n${mencoes}`);
+                    
+                    // Envia o checklist que criamos antes
+                    const embedCheck = await gerarEmbedChecklist(); // Função que cria o embed do post anterior
+                    await canal.send({ embeds: [embedCheck] });
+
+                    // Marca como enviado
+                    evento.alertasEnviados.push(g.nome);
+                    await evento.save();
+                }
+            }
+        }
+    }
 }
 
 async function getDadosTorre(idDoCanal) {
