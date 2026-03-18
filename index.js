@@ -87,11 +87,8 @@ async function verificarAlertas() {
 
         const gatilhos = [
             { m: 1440, nome: '24h' },
-            { m: 600,  nome: '10h' },
-            { m: 300,  nome: '5h' },
-            { m: 120,  nome: '2h' },
-            { m: 60,   nome: '1h' },
-            { m: 30,   nome: '30min' }
+            { m: 180,  nome: '3h' },
+            { m: 60,   nome: '1h' }
         ];
 
         for (const g of gatilhos) {
@@ -390,6 +387,28 @@ client.on('messageCreate', async message => {
         message.reply(`✅ Evento marcado! O cronômetro no \`!torre\` agora atualizará em tempo real.`);
         // Apaga o comando !data para limpar o chat
         setTimeout(() => message.delete().catch(() => {}), 2000);
+
+        if (dataValida) {
+        dados.dataEvento = dataObjeto;
+        await dados.save();
+
+        // NOVO: Alerta de Convocação Imediata
+        const formatada = dataObjeto.toLocaleString('pt-BR');
+        
+        // Você pode usar @everyone ou o ID do cargo ex: <@&ID_DO_CARGO>
+        const chamada = `📢 **NOVA INSTÂNCIA MARCADA!**\n` +
+                        `📅 **Data:** ${formatada}\n` +
+                        `📍 **Local:** ${message.channel.name}\n\n` +
+                        `⚠️ <@1100422246998233199>, a data foi definida! Não esqueçam de clicar nos botões acima para garantir sua vaga e classe.`;
+
+        await message.channel.send(chamada);
+        
+        // Atualiza o painel principal para mostrar a nova data no embed
+        await enviarPainelAtualizado(message.channel, canalId);
+        
+        // Apaga a mensagem do comando para manter o tópico limpo
+        await message.delete().catch(() => {});
+        }
     }
 
     // COMANDO: !ajuda
