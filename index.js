@@ -6,16 +6,21 @@ const http = require('http'); // Adicionado para o Keep-Alive
 // --- SERVIDOR PARA RECEBER O CRON-JOB ---
 http.createServer(async (_, res) => {
     try {
+        // Toda vez que o cron-job acessar a URL, o bot verifica se há alertas para enviar
         await verificarAlertas(); 
-        res.writeHead(200, {'Content-Type': 'text/plain'});
-        res.write("Sistema de Alertas Processado!");
+        
+        // Resposta padrão para o navegador/serviço de cron
+        res.writeHead(200, {'Content-Type': 'text/plain; charset=utf-8'});
+        res.write("Monitor de Torre: Ativo | Alertas: Processados");
         res.end();
     } catch (err) {
-        console.error("Erro no processamento do Cron:", err);
+        console.error("Erro no processamento do servidor HTTP:", err);
         res.writeHead(500);
         res.end();
     }
-}).listen(process.env.PORT || 3000);
+}).listen(process.env.PORT || 3000, () => {
+    console.log("Servidor de monitoramento rodando na porta 3000");
+});
 
 // Conexão com o MongoDB
 mongoose.connect(process.env.MONGO_URI)
@@ -91,26 +96,25 @@ async function verificarAlertas() {
 
         for (const g of gatilhos) {
         // A CONDIÇÃO: Menor que o gatilho, maior que zero e não enviado ainda
-            if (diffMinutos <= g.m && diffMinutos > 0 && !evento.alertasEnviados.includes(g.nome)) {
-            
+            // Dentro do loop da função verificarAlertas
+            if (diffMinutos <= g.m && diffMinutos > (g.m - 10) && !evento.alertasEnviados.includes(g.nome)) {
+                
                 const canal = await client.channels.fetch(evento.eventoId).catch(() => null);
                 if (canal) {
                     let mencoes = "";
-                    // Forma segura de ler o Map de inscritos
                     for (const [classe, lista] of evento.inscritos) {
-                        lista.forEach(id => {
-                            if (!mencoes.includes(id)) mencoes += `${id} `;
-                        });
+                        lista.forEach(id => { if (!mencoes.includes(id)) mencoes += `${id} `; });
                     }
 
-                    // Envia a notificação
-                    await canal.send(`🔔 **ALERTA ${g.nome.toUpperCase()}!** Preparem os itens!\n${mencoes}`);
-                
-                    // Envia o checklist
-                    const embedCheck = await gerarEmbedChecklist();
-                    await canal.send({ embeds: [embedCheck] });
+                    // TEXTO LIMPO E DIRETO:
+                    const mensagemAlerta = `🔔 **ALERTA DE ${g.nome.toUpperCase()}!**\n` +
+                                        `📍 A torre começará em breve!\n` +
+                                        `👥 Participantes: ${mencoes}\n\n` +
+                                        `💡 *Dica: Digite **!checklist** para ver os itens e equipamentos obrigatórios.*`;
 
-                    // Salva o alerta como enviado
+                    await canal.send(mensagemAlerta);
+
+                    // Salva que o alerta foi enviado
                     evento.alertasEnviados.push(g.nome);
                     await evento.save();
                 }
@@ -442,7 +446,7 @@ client.on('messageCreate', async message => {
                     name: '🛡️ Equipamentos Obrigatórios (Todos)', 
                     value: '• Armaduras: com cartas MARC e PASANA (ED proibida!)\n' +
                            '• Capa: Nyd com Raydric ou Noxious p/ uso na Valk e Ifrit.\n' +
-                           '• Cabeça: carta Nightmare (ou Pet Nightmare Terror) e carta Giearth.\n' +
+                           '• Cabeça: com carta Nightmare (ou Pet Nightmare Terror) e carta Giearth.\n' +
                            '• Acessórios: com carta Alligator p/ uso na Valk e Ifrit.'
                 },
                 { 
