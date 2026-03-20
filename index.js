@@ -237,13 +237,14 @@ client.once('ready', async () => {
         },
         {
             name: 'data',
-            description: 'Define a data e hora do evento',
+            description: 'Define a data e hora (Ex: 05/04 19:30)',
             options: [
-                { name: 'dia', description: 'O dia do evento (DD)', type: 4, required: true },
-                { name: 'mes', description: 'O mês do evento (MM)', type: 4, required: true },
-                { name: 'ano', description: 'O ano do evento (AAAA)', type: 4, required: true },
-                { name: 'hora', description: 'A hora do evento (HH)', type: 4, required: true },
-                { name: 'minuto', description: 'O minuto do evento (mm)', type: 4, required: true }
+                { 
+                    name: 'quando', 
+                    type: 3, 
+                    description: 'Digite no formato DD/MM HH:MM', 
+                    required: true 
+                }
             ]
         },
         {
@@ -305,37 +306,48 @@ client.on('interactionCreate', async interaction => {
         }
 
         if (interaction.commandName === 'data') {
-        const [d, m, a, h, min] = ['dia','mes','ano','hora','minuto'].map(n => interaction.options.getInteger(n));
-        const novaData = new Date(`${a}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}T${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}:00-03:00`);
-            
-            if (isNaN(novaData.getTime())) {
-                return interaction.reply({ content: '❌ Data inválida! Verifique os números digitados.', ephemeral: true });
+            const entrada = interaction.options.getString('quando');
+            const formatoValido = /^(\d{2})\/(\d{2})\s(\d{2}):(\d{2})$/;
+            const match = entrada.match(formatoValido);
+
+            if (!match) {
+                return interaction.reply({ 
+                    content: '❌ Formato inválido! Use: **DD/MM HH:MM** (Ex: 05/04 19:30)', 
+                    ephemeral: true 
+                });
             }
 
-            const dados = await Instancia.findOne({ eventoId: canalId });
-            if (!dados) return interaction.reply({ content: '❌ Use /abrir primeiro para configurar a instância.', ephemeral: true });
+            const [_, dia, mes, hora, minuto] = match;
+            const ano = new Date().getFullYear();
+            const dataString = `${ano}-${mes}-${dia}T${hora}:${minuto}:00-03:00`;
+            const novaData = new Date(dataString);
+
+            if (isNaN(novaData.getTime())) {
+                return interaction.reply({ content: '❌ Data ou hora numericamente inválida!', ephemeral: true });
+            }
+
+            const dados = await Instancia.findOne({ eventoId: interaction.channel.id });
+            if (!dados) return interaction.reply({ content: '❌ Use /abrir primeiro!', ephemeral: true });
 
             if (dados.ultimaDataMsgId) {
                 try {
                     const msgAntiga = await interaction.channel.messages.fetch(dados.ultimaDataMsgId);
                     if (msgAntiga) await msgAntiga.delete();
-                } catch (err) {
-                    console.log("Mensagem de data anterior não encontrada ou já deletada.");
-                }
+                } catch (err) { /* Mensagem já deletada */ }
             }
 
             dados.dataEvento = novaData;
             dados.alertasEnviados = [];
             await dados.save();
 
-            const formatada = novaData.toLocaleString('pt-BR', { timeZone: 'America/Fortaleza' });
-            const novaMsg = await interaction.channel.send(
-                `📢 **${CONFIG_INSTANCIAS[dados.tipoInstancia].nome} MARCADA!**\n` +
-                `📅 **Data:** ${formatada}\n` +
-                `⚠️ <@&1100422246998233199>, inscrevam-se!`
+            const timestamp = Math.floor(novaData.getTime() / 1000);
+            const msgAnuncio = await interaction.channel.send(
+                `📢 **A instância ${CONFIG_INSTANCIAS[dados.tipoInstancia].nome} foi MARCADA!**\n` +
+                `📅 **Início:** <t:${timestamp}:F>\n` +
+                `⚠️ <@&1100422246998233199>, preparem-se!`
             );
 
-            dados.ultimaDataMsgId = novaMsg.id;
+            dados.ultimaDataMsgId = msgAnuncio.id;
             await dados.save();
 
             await interaction.reply({ content: '✅ Horário atualizado com sucesso!', ephemeral: true });
