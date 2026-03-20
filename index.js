@@ -247,11 +247,11 @@ client.once('ready', async () => {
         },
         {
             name: 'checklist',
-            description: 'Exibe os itens e equipamentos obrigatórios para a instância atual',
+            description: 'Exibe os itens e equipamentos obrigatórios para a instância atual'
         },
         {
             name: 'ajuda',
-            description: 'Exibe o manual de instruções do bot',
+            description: 'Exibe o manual de instruções do bot'
         },
         {
             name: 'adicionar',
