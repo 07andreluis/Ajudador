@@ -370,21 +370,24 @@ client.on('interactionCreate', async interaction => {
             const titulo = interaction.options.getString('titulo');
             
             try {
+                if (!interaction.channel.threads) {
+                    return interaction.reply({ content: '❌ Este tipo de canal não suporta tópicos.', ephemeral: true });
+                }
                 const topico = await interaction.channel.threads.create({
                     name: titulo,
                     autoArchiveDuration: 2880,
+                    type: 12, 
                     reason: 'Organização de Instância pelo bot',
                 });
 
                 await topico.members.add(interaction.user.id);
-
                 await interaction.reply({ 
                     content: `✅ Tópico **${titulo}** criado com sucesso! <#${topico.id}>`, 
                     ephemeral: true 
                 });
 
                 await topico.send({ 
-                    content: `👋 Olá <@${interaction.user.id}>! Este tópico está pronto para a organização.\nUse \`/abrir\` para gerar o painel de vagas da instância desejada. \nEm seguida use \`/data\` para marcar o horário.`
+                    content: `👋 Olá <@${interaction.user.id}>! Este tópico está pronto para a organização.\nUse /abrir para gerar o painel de vagas da instância desejada. \nEm seguida use /data para marcar o horário.`
                 });
 
             } catch (error) {
