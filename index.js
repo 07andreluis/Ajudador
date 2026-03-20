@@ -31,6 +31,7 @@ const InstanciaSchema = new mongoose.Schema({
     dataEvento: { type: Date, default: null },
     alertasEnviados: { type: [String], default: [] },
     ultimaMensagemId: { type: String, default: null },
+    ultimaDataMsgId: { type: String, default: null },
     inscritos: { type: Map, of: [String], default: {} }
 });
 
@@ -243,6 +244,29 @@ client.once('ready', async () => {
                 { name: 'hora', description: 'A hora do evento (HH)', type: 4, required: true },
                 { name: 'minuto', description: 'O minuto do evento (mm)', type: 4, required: true }
             ]
+        },
+        {
+            name: 'checklist',
+            description: 'Exibe os itens e equipamentos obrigatórios para a instância atual',
+        },
+        {
+            name: 'ajuda',
+            description: 'Exibe o manual de instruções do bot',
+        },
+        {
+            name: 'adicionar',
+            description: 'Adiciona manualmente um usuário a uma classe (Admin)',
+            options: [
+                { name: 'usuario', type: 6, description: 'Usuário a ser adicionado', required: true },
+                { name: 'classe', type: 3, description: 'Nome da classe', required: true }
+            ]
+        },
+        {
+            name: 'remover',
+            description: 'Remove um usuário de uma classe (Admin)',
+            options: [
+                { name: 'usuario', type: 6, description: 'Usuário a ser removido', required: true }
+            ]
         }
     ];
 
@@ -264,19 +288,157 @@ client.on('interactionCreate', async interaction => {
         }
 
         if (interaction.commandName === 'data') {
-            const [d, m, a, h, min] = ['dia','mes','ano','hora','minuto'].map(n => interaction.options.getInteger(n));
-            const novaData = new Date(`${a}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}T${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}:00-03:00`);
+        const [d, m, a, h, min] = ['dia','mes','ano','hora','minuto'].map(n => interaction.options.getInteger(n));
+        const novaData = new Date(`${a}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}T${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}:00-03:00`);
             
+            if (isNaN(novaData.getTime())) {
+                return interaction.reply({ content: '❌ Data inválida! Verifique os números digitados.', ephemeral: true });
+            }
+
             const dados = await Instancia.findOne({ eventoId: canalId });
-            if (!dados) return interaction.reply({ content: '❌ Use /abrir primeiro!', ephemeral: true });
+            if (!dados) return interaction.reply({ content: '❌ Use /abrir primeiro para configurar a instância.', ephemeral: true });
+
+            if (dados.ultimaDataMsgId) {
+                try {
+                    const msgAntiga = await interaction.channel.messages.fetch(dados.ultimaDataMsgId);
+                    if (msgAntiga) await msgAntiga.delete();
+                } catch (err) {
+                    console.log("Mensagem de data anterior não encontrada ou já deletada.");
+                }
+            }
 
             dados.dataEvento = novaData;
             dados.alertasEnviados = [];
             await dados.save();
 
-            await interaction.channel.send(`📢 **${CONFIG_INSTANCIAS[dados.tipoInstancia].nome} MARCADA!**\n📅 **Data:** ${novaData.toLocaleString('pt-BR', { timeZone: 'America/Fortaleza' })}\n⚠️ <@&1100422246998233199>, inscrevam-se!`);
-            await interaction.reply({ content: '✅ Data definida!', ephemeral: true });
+            const formatada = novaData.toLocaleString('pt-BR', { timeZone: 'America/Fortaleza' });
+            const novaMsg = await interaction.channel.send(
+                `📢 **${CONFIG_INSTANCIAS[dados.tipoInstancia].nome} MARCADA!**\n` +
+                `📅 **Data:** ${formatada}\n` +
+                `⚠️ <@&1100422246998233199>, inscrevam-se!`
+            );
+
+            dados.ultimaDataMsgId = novaMsg.id;
+            await dados.save();
+
+            await interaction.reply({ content: '✅ Horário atualizado com sucesso!', ephemeral: true });
             await enviarPainelAtualizado(interaction.channel);
+        }
+
+        if (interaction.commandName === 'checklist') {
+            const dados = await Instancia.findOne({ eventoId: canalId });
+            if (!dados) return interaction.reply({ content: '❌ Instância não configurada. Use /abrir primeiro.', ephemeral: true });
+
+            const embed = new EmbedBuilder();
+
+            if (dados.tipoInstancia === 'et') {
+                embed.setTitle('🎒 Checklist de Suprimentos - Torre Sem Fim')
+                    .setDescription('Preparem seus estoques! A falta de um item pode causar o wipe do grupo.')
+                    .setColor('#e67e22')
+                    .addFields(
+                        { name: '🛡️ Equipamentos Obrigatórios (Todos)', value: '• Armaduras: com cartas MARC e PASANA (ED proibida!)\n• Capa: Nyd com Raydric ou Noxious p/ uso na Valk e Ifrit.\n• Cabeça: com carta Nightmare (ou Pet Nightmare Terror) e carta Giearth.\n• Acessórios: com carta Alligator p/ uso na Valk e Ifrit.' },
+                        { name: '🧪 Consumíveis Gerais', value: '• 25 Panaceas | 10 Ygg Leafs | 15 Scrolls de Mercenário (level 1 já serve)\n• Itens de HP/SP e 500k em Zeny para gastos locais.\n📍 *Scrolls: /navi prontera 42/336*' },
+                        { name: '🧙 Suportes (Gemas/Água)', value: '• **HP:** 250+ Blue Gemstone | 70+ Holy Water\n• **Prof:** 100+ Blue Gemstone | 100+ Yellow Gemstone' },
+                        { name: '🏹 Snipers', value: '• 15+ Conversores (cada elemento) | 20+ Cursed Water\n• 2k Flecha Imaterial | 100 Traps' },
+                        { name: '🛡️ Escudos Especiais (p/ quem usa)', value: '• Escudo com carta Medusa (Exceto Devo e CF)\n• Escudo com cartas Tatacho ou Hodremlin\n• Escudo com carta Alice' }
+                    )
+                    .setFooter({ text: '💡 Dica: Use o RODEX para enviar itens e economizar peso!' });
+            } 
+            
+            else if (dados.tipoInstancia === 'ec') {
+                embed.setTitle('🎒 Checklist de Suprimentos - Endless Cellar (EC)')
+                    .setDescription('Itens vitais para a sobrevivência nas profundezas da Cellar.')
+                    .setColor('#8e44ad')
+                    .addFields(
+                        { name: '🛡️ Essenciais para TODOS', value: '• Armadura com Marc (ED proibida!)\n• Elmo com Nightmare (ou Pet Nightmare Terror)\n• 20+ Panaceas | 10 Folhas de Ygg | 500k Zeny\n• Suprimentos de HP e SP' },
+                        { name: '🛡️ Classes com Escudo', value: '• Medusa (Exceto Devo/CF) | Tatacho (ou Hodremlin) | Alice' },
+                        { name: '🏹 Snipers', value: '• Dragon Wing (Nyd) | Arco da BG (Bio3)\n• 2k+ Immaterial Arrow | Falcon Assault na barra\n• 10 Conversores (Wind/Earth/Water) | 20+ Fire' },
+                        { name: '🧪 Creator & Suportes', value: '• **Creator:** 150+ ADs | 30+ Glistening Coats\n• **HP:** 200+ Blue Gemstone | 50+ Holy Water\n• **Prof:** 150+ Blue Gemstone | 100+ Yellow Gemstone' }
+                    );
+            }
+
+            else if (dados.tipoInstancia === 'celine') {
+                embed.setTitle('🎒 Checklist de Suprimentos - HTF (Celine)')
+                    .setDescription('Prepare-se para enfrentar os horrores da Fábrica de Brinquedos.')
+                    .setColor('#e74c3c')
+                    .addFields(
+                        { name: '🛡️ Essenciais para TODOS', value: '• 20+ Panaceas | 10 Folhas de Ygg\n• 5 Fireproof Potion | Itens de HP/SP' },
+                        { name: '🎭 Suportes (HP/Bragi/Dancer)', value: '• Armadura com Pasana | Escudo com Medusa\n• Elmo com Nightmare (ou Pet Nightmare Terror)\n• **HP:** 150+ Blue Gemstone | 10+ Holy Water' },
+                        { name: '🏹 Sniper', value: '• 1k Immaterial Arrow | Elmo com Nightmare\n• Sniper Suit com Pasana | Arco MVP Ghost (2 AK / 2 Maoguai)' }
+                    );
+            }
+
+            else if (dados.tipoInstancia === 'galho') {
+                embed.setTitle('🎒 Checklist de Suprimentos - PT de Galho Seco')
+                    .setDescription('Itens para garantir o sustain durante os galhos.')
+                    .setColor('#2ecc71')
+                    .addFields(
+                        { name: '📦 Essenciais para TODOS', value: '• 25+ Panaceas | 2 Folhas de YGG\n• Itens de recuperação de SP' },
+                        { name: '🧙 Suportes', value: '• **Prof:** 100+ Blue Gemstone | 100+ Yellow Gemstone | 50+ Cobweb\n• **HP:** 150+ Blue Gemstone' }
+                    );
+            }
+
+            await interaction.reply({ embeds: [embed] });
+        }
+
+        if (interaction.commandName === 'adicionar') {
+            if (!interaction.member.permissions.has('Administrator')) return interaction.reply({ content: 'Sem permissão.', ephemeral: true });
+            
+            const target = interaction.options.getUser('usuario');
+            const classe = interaction.options.getString('classe');
+            const dados = await Instancia.findOne({ eventoId: canalId });
+            
+            if (!dados) return interaction.reply({ content: 'Use /abrir primeiro.', ephemeral: true });
+            
+            let lista = dados.inscritos.get(classe) || [];
+            lista.push(`<@${target.id}>`);
+            dados.inscritos.set(classe, lista);
+            await dados.save();
+            
+            await interaction.reply({ content: `✅ ${target.username} adicionado a ${classe}.`, ephemeral: true });
+            await enviarPainelAtualizado(interaction.channel);
+        }
+
+        // --- COMANDO /AJUDA ---
+        if (interaction.commandName === 'ajuda') {
+            const embedAjuda = new EmbedBuilder()
+                .setTitle('📖 Guia de Operação - Organizador de Instâncias')
+                .setDescription('Siga o roteiro abaixo para organizar sua instância com eficiência:')
+                .setColor('#ffffff')
+                .addFields(
+                    { 
+                        name: '🚀 Roteiro de Organização (Passo a Passo)', 
+                        value: '1️⃣ **Inicie a Chamada:** Use `/abrir` e escolha o tipo (ET, EC, Celine ou Galho).\n' +
+                            '2️⃣ **Defina o Horário:** Use `/data` preenchendo os campos numéricos para marcar o início.\n' +
+                            '3️⃣ **Aguarde as Inscrições:** O cronômetro e as cores do painel atualizarão sozinhos.\n' +
+                            '4️⃣ **Faxina Automática:** O bot apaga painéis antigos para manter o chat limpo.'
+                    },
+                    { 
+                        name: '🎮 Comandos de Jogador', 
+                        value: '• **/abrir** - Gera o painel de inscrição se ainda não existir.\n' +
+                            '• **/checklist** - Mostra os itens obrigatórios para a instância atual.\n' +
+                            '• **Botão Classe:** Clique para ocupar uma vaga principal.\n' +
+                            '• **Botão Reserva:** Entre na fila de espera se as vagas encherem.\n' +
+                            '• **Botão Sair:** Remove você da lista automaticamente.'
+                    },
+                    { 
+                        name: '🛠️ Comandos de Líder (Admin)', 
+                        value: '• **/data** - Define ou altera o horário do evento.\n' +
+                            '• **/adicionar** - Selecione o usuário e a classe para colocar alguém direto na vaga.\n' +
+                            '• **/remover** - Retira um membro da vaga ocupada através da seleção de usuário.\n' +
+                            '• **Botão Resetar:** Limpa todas as vagas da instância atual.'
+                    },
+                    { 
+                        name: '💡 Dicas de Ouro', 
+                        value: '• Crie um **Tópico Novo** para cada instância para não misturar as listas.\n' +
+                            '• As cores do painel mudam: 🔵 (Longe), 🟡 (Faltam 2h), 🔴 (Atrasado).\n' +
+                            '• Use o comando **/checklist** logo após marcar a data para orientar o grupo.\n' +
+                            '• O sistema de alertas avisa o grupo automaticamente 24h, 3h e 1h antes.'
+                    }
+                )
+                .setFooter({ text: 'Sistema de Apoio ao Clã criado por André Luís' });
+
+            await interaction.reply({ embeds: [embedAjuda], ephemeral: true });
         }
     }
 
