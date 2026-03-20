@@ -375,8 +375,7 @@ client.on('interactionCreate', async interaction => {
                 }
                 const topico = await interaction.channel.threads.create({
                     name: titulo,
-                    autoArchiveDuration: 2880,
-                    type: 12, 
+                    type: interaction.channel.type === 0 ? 11 : 12, 
                     reason: 'Organização de Instância pelo bot',
                 });
 
