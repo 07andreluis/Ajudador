@@ -49,6 +49,7 @@ const CONFIG_INSTANCIAS = {
     et: {
         nome: "Endless Tower (ET)",
         emoji: "🗼",
+        limiteGrupo: 12,
         cor: "#3498db",
         classes: {
             'Sniper': { limite: 5, emoji: '🏹' },
@@ -64,6 +65,7 @@ const CONFIG_INSTANCIAS = {
     ec: {
         nome: "Endless Cellar (EC)",
         emoji: "🍷",
+        limiteGrupo: 12,
         cor: "#8e44ad",
         classes: {
             'Sniper': { limite: 4, emoji: '🏹' },
@@ -80,6 +82,7 @@ const CONFIG_INSTANCIAS = {
     galho: {
         nome: "PT de Galho Seco",
         emoji: "🌳",
+        limiteGrupo: 12,
         cor: "#2ecc71",
         classes: {
             'Sniper': { limite: 1, emoji: '🏹' },
@@ -97,6 +100,7 @@ const CONFIG_INSTANCIAS = {
     celine: {
         nome: "HTF (Celine)",
         emoji: "🧸",
+        limiteGrupo: 5,
         cor: "#e74c3c",
         classes: {
             'Sniper': { limite: 1, emoji: '🏹' },
@@ -161,11 +165,12 @@ async function getDadosInstancia(idDoCanal) {
 
 async function gerarEmbed(idDoCanal) {
     const dados = await getDadosInstancia(idDoCanal);
-    if (!dados) return new EmbedBuilder().setTitle("❌ Instância não configurada. Use /abrir");
+    if (!dados) return new EmbedBuilder().setTitle("❌ Instância não configurada. Volte ao **#instâncias** e use /criar para iniciar.");
 
     const infoInstancia = CONFIG_INSTANCIAS[dados.tipoInstancia];
     const contagemTexto = calcularContagem(dados.dataEvento);
-    
+    const limiteMaximo = infoInstancia.limiteGrupo || 12;
+
     let totalInscritos = 0;
     dados.inscritos.forEach((lista, classe) => {
         if (classe !== 'Reserva') {
@@ -173,7 +178,7 @@ async function gerarEmbed(idDoCanal) {
         }
     });
 
-    const statusGrupo = totalInscritos >= 12 ? "🔴 GRUPO CHEIO" : "🟢 VAGAS ABERTAS";
+    const statusGrupo = totalInscritos >= limiteMaximo ? "🔴 GRUPO CHEIO" : "🟢 VAGAS ABERTAS";
 
     let corEmbed = infoInstancia.cor; 
     if (dados.dataEvento) {
@@ -185,9 +190,9 @@ async function gerarEmbed(idDoCanal) {
 
     const embed = new EmbedBuilder()
         .setTitle(`${infoInstancia.emoji} ${infoInstancia.nome} - Inscrição`)
-        .setDescription(`${contagemTexto}\n\n**Status do Grupo:** ${statusGrupo} (${totalInscritos}/12)\n\nSelecione sua classe abaixo.`)
-        .setColor(corEmbed)
-        .setFooter({ text: `ID: ${idDoCanal} | Tipo: ${dados.tipoInstancia.toUpperCase()}` });
+        .setDescription(`${contagemTexto}\n\n**Status do Grupo:** ${statusGrupo} (${totalInscritos}/${limiteMaximo})\n\nSelecione sua classe abaixo.`)
+        .setColor(infoInstancia.cor)
+        .setFooter({ text: `ID: ${idDoCanal} | Responsável: ${dados.criadorId ? 'Definido' : 'Não definido'}` });
 
     for (const [classe, info] of Object.entries(infoInstancia.classes)) {
         const listaIds = dados.inscritos.get(classe) || [];
@@ -598,6 +603,20 @@ client.on('interactionCreate', async interaction => {
             dados.inscritos = new Map();
         } else {
             const classe = interaction.customId.replace('insc_', '');
+            if (classe !== 'Reserva') {
+                let totalAtual = 0;
+                dados.inscritos.forEach((lista, nomeClasse) => {
+                    if (nomeClasse !== 'Reserva') totalAtual += lista.length;
+                });
+
+                if (totalAtual >= limiteMaximo) {
+                    return interaction.reply({ 
+                        content: `❌ Este grupo já atingiu o limite de **${limiteMaximo}** pessoas. Inscreva-se como **Reserva**!`, 
+                        ephemeral: true 
+                    });
+                }
+            }
+            
             const lista = dados.inscritos.get(classe) || [];
             let jaInscrito = false;
             dados.inscritos.forEach(l => { if (l.includes(userId)) jaInscrito = true; });
