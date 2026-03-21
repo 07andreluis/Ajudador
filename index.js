@@ -403,7 +403,7 @@ client.on('interactionCreate', async interaction => {
                 });
 
                 await topico.send({ 
-                    content: `👋 Olá <@${interaction.user.id}>! Este tópico está pronto para a organizar a instância **${CONFIG_INSTANCIAS[tipoSelecionado].nome}**.\nUse /painel para gerar o painel de vagas da instância. \nEm seguida use /data para marcar o horário.`
+                    content: `👋 Olá <@${interaction.user.id}>! Este tópico está pronto para a organizar a instância **${CONFIG_INSTANCIAS[tipoSelecionado].nome}**.\nUse /data para marcar o dia e horário da sua instância.\nEm seguida, automaticamente será gerado o painel de vagas da instância para você escolher sua vaga.\nObs.: se usado, o comando /painel gera um painel nas mensagens mais recentes do tópico.`
                 });
 
             } catch (error) {
