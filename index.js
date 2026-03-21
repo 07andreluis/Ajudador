@@ -27,6 +27,7 @@ mongoose.connect(process.env.MONGO_URI)
 // Esquema do Banco de Dados
 const InstanciaSchema = new mongoose.Schema({
     eventoId: { type: String, required: true },
+    criadorId: String,
     tipoInstancia: { type: String, default: 'et' },
     dataEvento: { type: Date, default: null },
     alertasEnviados: { type: [String], default: [] },
@@ -225,15 +226,8 @@ client.once('ready', async () => {
 
     const comandos = [
         {
-            name: 'abrir',
-            description: 'Inicia o painel de uma instância neste tópico',
-            options: [{
-                name: 'instancia',
-                type: 3, 
-                description: 'Qual instância deseja abrir?',
-                required: true,
-                choices: Object.keys(CONFIG_INSTANCIAS).map(k => ({name: CONFIG_INSTANCIAS[k].nome, value: k }))
-            }]
+            name: 'painel',
+            description: 'Gera ou atualiza o painel de vagas neste tópico'
         },
         {
             name: 'data',
@@ -251,6 +245,18 @@ client.once('ready', async () => {
             name: 'criar',
             description: 'Cria um novo tópico para organizar uma instância',
             options: [
+                { 
+                    name: 'instancia', 
+                    type: 3, 
+                    description: 'Qual instância será organizada?', 
+                    required: true,
+                    choices: [
+                        { name: 'Endless Tower (ET)', value: 'et' },
+                        { name: 'Endless Cellar (EC)', value: 'ec' },
+                        { name: 'PT de Galho Seco', value: 'galho' },
+                        { name: 'HTF (Celine)', value: 'celine' }
+                    ]
+                },
                 { 
                     name: 'titulo', 
                     type: 3, 
@@ -293,27 +299,18 @@ client.on('interactionCreate', async interaction => {
     const userId = `<@${interaction.user.id}>`;
 
     if (interaction.isChatInputCommand()) {
-        if (interaction.commandName === 'abrir') {
-            const tipoEscolhido = interaction.options.getString('instancia');
-            
-            let dados = await Instancia.findOne({ eventoId: canalId });
+        let dados = await Instancia.findOne({ eventoId: canalId });
+        if (interaction.commandName === 'painel') {
+            if (!dados) return interaction.reply({ content: '❌ Use `/criar` primeiro!', ephemeral: true });
 
-            if (dados && dados.tipoInstancia === tipoEscolhido) {
-                await interaction.reply({ content: `🔄 Trazendo o painel de ${CONFIG_INSTANCIAS[tipoEscolhido].nome} para cá...`, ephemeral: true });
-            } else {
-                await Instancia.findOneAndUpdate(
-                    { eventoId: canalId }, 
-                    { 
-                        tipoInstancia: tipoEscolhido, 
-                        inscritos: new Map(), 
-                        dataEvento: null, 
-                        alertasEnviados: [] 
-                    }, 
-                    { upsert: true }
-                );
-                await interaction.reply({ content: `✅ Nova instância de ${CONFIG_INSTANCIAS[tipoEscolhido].nome} iniciada!`, ephemeral: true });
+            const isDono = interaction.user.id === dados.criadorId;
+            const isAdm = interaction.member.permissions.has('Administrator');
+
+            if (!isDono && !isAdm) {
+                return interaction.reply({ content: '❌ Apenas o Líder da PT ou ADMs podem gerar o painel.', ephemeral: true });
             }
 
+            await interaction.reply({ content: '🔄 Gerando painel de vagas...', ephemeral: true });
             await enviarPainelAtualizado(interaction.channel);
         }
 
@@ -338,8 +335,11 @@ client.on('interactionCreate', async interaction => {
                 return interaction.reply({ content: '❌ Data ou hora numericamente inválida!', ephemeral: true });
             }
 
-            const dados = await Instancia.findOne({ eventoId: interaction.channel.id });
-            if (!dados) return interaction.reply({ content: '❌ Use /abrir primeiro!', ephemeral: true });
+            if (!dados) return interaction.reply({ content: '❌ Instância não encontrada.', ephemeral: true });
+            
+            if (interaction.user.id !== dados.criadorId && !interaction.member.permissions.has('Administrator')) {
+                return interaction.reply({ content: '❌ Sem permissão para alterar a data.', ephemeral: true });
+            }
 
             if (dados.ultimaDataMsgId) {
                 try {
@@ -356,7 +356,7 @@ client.on('interactionCreate', async interaction => {
             const msgAnuncio = await interaction.channel.send(
                 `📢 **A instância ${CONFIG_INSTANCIAS[dados.tipoInstancia].nome} foi MARCADA!**\n` +
                 `📅 **Início:** <t:${timestamp}:F>\n` +
-                `⚠️ <@&1297951167669862521><@&1100422246998233199>, inscrevam-se!`
+                `⚠️ <@&1100422246998233199>, inscrevam-se!`
             );
 
             dados.ultimaDataMsgId = msgAnuncio.id;
@@ -367,17 +367,25 @@ client.on('interactionCreate', async interaction => {
         }
 
         if (interaction.commandName === 'criar') {
+            const tipoSelecionado = interaction.options.getString('instancia');
             const titulo = interaction.options.getString('titulo');
             
             try {
-                if (!interaction.channel.threads) {
-                    return interaction.reply({ content: '❌ Este tipo de canal não suporta tópicos.', ephemeral: true });
-                }
                 const topico = await interaction.channel.threads.create({
                     name: titulo,
                     type: interaction.channel.type === 0 ? 11 : 12, 
                     reason: 'Organização de Instância pelo bot',
                 });
+
+                const novaInstancia = new Instancia({
+                    eventoId: topico.id,
+                    tipoInstancia: tipoSelecionado,
+                    inscritos: new Map(),
+                    criadorId: interaction.user.id,
+                    alertasEnviados: []
+                });
+
+                await novaInstancia.save();
 
                 await topico.members.add(interaction.user.id);
                 await interaction.reply({ 
@@ -386,7 +394,7 @@ client.on('interactionCreate', async interaction => {
                 });
 
                 await topico.send({ 
-                    content: `👋 Olá <@${interaction.user.id}>! Este tópico está pronto para a organização.\nUse /abrir para gerar o painel de vagas da instância desejada. \nEm seguida use /data para marcar o horário.`
+                    content: `👋 Olá <@${interaction.user.id}>! Este tópico está pronto para a organizar a instância **${tipoSelecionado}**.\nUse /painel para gerar o painel de vagas da instância. \nEm seguida use /data para marcar o horário.`
                 });
 
             } catch (error) {
@@ -396,11 +404,8 @@ client.on('interactionCreate', async interaction => {
         }
 
         if (interaction.commandName === 'checklist') {
-            const dados = await Instancia.findOne({ eventoId: canalId });
-            if (!dados) return interaction.reply({ content: '❌ Instância não configurada. Use /abrir primeiro.', ephemeral: true });
-
+            if (!dados) return interaction.reply({ content: '❌ Instância não configurada. Use /criar primeiro.', ephemeral: true });
             const embed = new EmbedBuilder();
-
             if (dados.tipoInstancia === 'et') {
                 embed.setTitle('🎒 Checklist de Suprimentos - Torre Sem Fim')
                     .setDescription('Preparem seus estoques! A falta de um item pode causar o wipe do grupo.')
@@ -452,6 +457,18 @@ client.on('interactionCreate', async interaction => {
         }
 
         if (interaction.commandName === 'adicionar') {
+            if (!dados) return interaction.reply({ content: '❌ Nenhuma instância ativa neste tópico.', ephemeral: true });
+
+            const isDono = interaction.user.id === dados.criadorId;
+            const isAdm = interaction.member.permissions.has('Administrator');
+
+            if (!isDono && !isAdm) {
+                return interaction.reply({ 
+                    content: '❌ Apenas o **Líder da PT** que criou este tópico ou um **ADM** podem adicionar membros manualmente.', 
+                    ephemeral: true 
+                });
+            }
+            
             const targetUser = interaction.options.getUser('usuario');
             const targetId = `<@${targetUser.id}>`;
             let classeDigitada = interaction.options.getString('classe').trim();
@@ -463,8 +480,7 @@ client.on('interactionCreate', async interaction => {
             // Casos específicos manuais se necessário (ex: Bragi) APENAS UM EXEMPLO PODE SER DESATIVADO
             if (classeFormatada === 'Bragi') classeFormatada = 'Bragi'; 
 
-            const dados = await Instancia.findOne({ eventoId: canalId });
-            if (!dados) return interaction.reply({ content: '❌ Use /abrir primeiro!', ephemeral: true });
+            if (!dados) return interaction.reply({ content: '❌ Use /criar primeiro!', ephemeral: true });
 
             const infoInstancia = CONFIG_INSTANCIAS[dados.tipoInstancia];
             if (!infoInstancia.classes[classeFormatada]) {
@@ -492,12 +508,13 @@ client.on('interactionCreate', async interaction => {
         }
 
         if (interaction.commandName === 'remover') {
+            if (!dados) return interaction.reply({ content: '❌ Nenhuma instância ativa neste tópico.', ephemeral: true });
+            if (interaction.user.id !== dados.criadorId && !interaction.member.permissions.has('Administrator')) {
+                return interaction.reply({ content: '❌ Apenas o Líder ou ADMs podem remover membros manualmente.', ephemeral: true });
+            }
+            
             const targetUser = interaction.options.getUser('usuario');
             const targetId = `<@${targetUser.id}>`;
-            const canalId = interaction.channel.id;
-
-            const dados = await Instancia.findOne({ eventoId: canalId });
-            if (!dados) return interaction.reply({ content: '❌ Nenhuma instância ativa neste tópico.', ephemeral: true });
 
             let removido = false;
             dados.inscritos.forEach((lista, classe) => {
@@ -525,8 +542,8 @@ client.on('interactionCreate', async interaction => {
                 .addFields(
                     { 
                         name: '🚀 Roteiro de Organização (Passo a Passo)', 
-                        value: '1️⃣ **Crie o Tópico:** Use `/criar` e defina um título para seu tópico (por ex.: Galho - 20/03 - 20h).\n' +
-                            '2️⃣ **Escolha qual ir:** Use `/abrir` e escolha qual instância vai abrir (ET, EC, PT de Galho ou Celine).\n' +
+                        value: '1️⃣ **Crie o Tópico:** Use `/criar` e escolha qual instância vai abrir (ET, EC, PT de Galho ou Celine).\n' +
+                            '2️⃣ **Defina um título:** Ainda no `/criar` defina um título para seu tópico (por ex.: Galho - 20/03 - 20h).\n' +
                             '3️⃣ **Defina o Horário:** Use `/data` preenchendo os campos no formato DD/MM HH:MM para marcar o início.\n' +
                             '4️⃣ **Aguarde as Inscrições:** O cronômetro e as cores do painel atualizarão sozinhos.'
                     },
@@ -541,7 +558,7 @@ client.on('interactionCreate', async interaction => {
                     { 
                         name: '🛠️ Comandos de Líder ou Moderadores', 
                         value: '• **/data** - Define ou altera o horário do evento.\n' +
-                            '• **/abrir** - Gera o painel de inscrição. Obs.: use sempre que quiser chamar o painel p/ mensagens recentes.\n' +
+                            '• **/painel** - Gera o painel de inscrição. Obs.: use sempre que quiser chamar o painel p/ mensagens recentes.\n' +
                             '• **/adicionar** - Selecione o usuário e a classe para colocar alguém direto na vaga.\n' +
                             '• **/remover** - Retira um membro da vaga ocupada através da seleção de usuário.\n' +
                             '• **Botão Resetar:** Limpa todas as vagas da instância atual.'
