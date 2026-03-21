@@ -551,7 +551,7 @@ client.on('interactionCreate', async interaction => {
                 .addFields(
                     { 
                         name: '🚀 Roteiro de Organização (Passo a Passo)', 
-                        value: '1️⃣ **Crie o Tópico:** Use `/criar` e escolha qual instância vai abrir (ET, EC, PT de Galho ou Celine).\n' +
+                        value: '1️⃣ **Crie o Tópico:** Com o **#instâncias** aberto use o comando `/criar` e escolha qual instância vai abrir (ET, EC, PT de Galho ou Celine).\n' +
                             '2️⃣ **Defina um título:** Ainda no `/criar` defina um título para seu tópico (por ex.: Galho - 20/03 - 20h).\n' +
                             '3️⃣ **Escolha sua classe:** Use `/painel` para gerar o painel de classes e fazer sua escolha.\n' +
                             '4️⃣ **Defina o Horário:** Por fim, use `/data` preenchendo os campos no formato DD/MM HH:MM para marcar o início.'
@@ -577,6 +577,7 @@ client.on('interactionCreate', async interaction => {
                         value: '• Crie um **Tópico Novo** para cada instância para não misturar as listas.\n' +
                             '• As cores do painel mudam: 🔵 (Longe), 🟡 (Faltam 2h), 🔴 (Atrasado).\n' +
                             '• Use o comando **/checklist** logo após marcar a data para orientar o grupo.\n' +
+                            '• O painel informa visualmente se o grupo tem vagas através de: 🔴 GRUPO CHEIO ou 🟢 VAGAS ABERTAS.\n' +
                             '• O sistema de alertas avisa o grupo automaticamente 24h, 3h e 1h antes.'
                     }
                 )
