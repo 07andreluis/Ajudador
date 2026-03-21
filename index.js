@@ -188,11 +188,17 @@ async function gerarEmbed(idDoCanal) {
         else if (diff <= 2 * 60 * 60 * 1000) corEmbed = '#f1c40f';
     }
 
+    let nomeLider = "Não definido";
+    if (dados.criadorId) {
+        const membro = client.users.cache.get(dados.criadorId);
+        nomeLider = membro ? membro.username : `ID: ${dados.criadorId}`;
+    }
+
     const embed = new EmbedBuilder()
         .setTitle(`${infoInstancia.emoji} ${infoInstancia.nome} - Inscrição`)
         .setDescription(`${contagemTexto}\n\n**Status do Grupo:** ${statusGrupo} (${totalInscritos}/${limiteMaximo})\n\nSelecione sua classe abaixo.`)
         .setColor(infoInstancia.cor)
-        .setFooter({ text: `ID: ${idDoCanal} | Responsável: ${dados.criadorId ? 'Definido' : 'Não definido'}` });
+        .setFooter({ text: `ID: ${idDoCanal} | Líder do Grupo: ${nomeLider}` });
 
     for (const [classe, info] of Object.entries(infoInstancia.classes)) {
         const listaIds = dados.inscritos.get(classe) || [];
