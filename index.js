@@ -54,7 +54,7 @@ const CONFIG_INSTANCIAS = {
         classes: {
             'Sniper': { limite: 5, emoji: '🏹' },
             'HP': { limite: 2, emoji: '✝️' },
-            'Bardo': { limite: 1, emoji: '🎻' },
+            'Bragi': { limite: 1, emoji: '🎻' },
             'Dancer': { limite: 1, emoji: '💃' },
             'CF': { limite: 1, emoji: '💪' },
             'Devo': { limite: 1, emoji: '🛡️' },
@@ -70,7 +70,7 @@ const CONFIG_INSTANCIAS = {
         classes: {
             'Sniper': { limite: 4, emoji: '🏹' },
             'HP': { limite: 2, emoji: '✝️' },
-            'Bardo': { limite: 1, emoji: '🎻' },
+            'Bragi': { limite: 1, emoji: '🎻' },
             'Dancer': { limite: 1, emoji: '💃' },
             'CF': { limite: 1, emoji: '💪' },
             'Devo': { limite: 1, emoji: '🛡️' },
@@ -145,7 +145,7 @@ async function verificarAlertas() {
                 if (canal) {
                     let mencoes = "";
                     evento.inscritos.forEach(lista => lista.forEach(id => { if (!mencoes.includes(id)) mencoes += `${id} `; }));
-                    await canal.send(`🔔 **ALERTA DE ${g.nome}!**\n📍 A **${CONFIG_INSTANCIAS[evento.tipoInstancia].nome}** começará em breve!\n👥 Participantes: ${mencoes}!\n💡 *Dica: Digite **/checklist** para ver os itens e equipamentos obrigatórios.*`);
+                    await canal.send(`🔔 **ALERTA DE ${g.nome}!**\n📍 A **${CONFIG_INSTANCIAS[evento.tipoInstancia].nome}** começará em ${g.nome}!\n👥 Participantes: ${mencoes}\n💡 *Dica: Digite **/checklist** para ver os itens e equipamentos obrigatórios.*`);
                     evento.alertasEnviados.push(g.nome);
                     await evento.save();
                 }
@@ -327,7 +327,7 @@ client.on('interactionCreate', async interaction => {
             const isAdm = interaction.member.permissions.has('Administrator');
 
             if (!isDono && !isAdm) {
-                return interaction.reply({ content: '❌ Apenas o Líder da PT ou ADMs podem gerar o painel.', ephemeral: true });
+                return interaction.reply({ content: '❌ Apenas o Líder do Grupo ou ADMs podem gerar o painel.', ephemeral: true });
             }
 
             await interaction.reply({ content: '🔄 Gerando painel de vagas...', ephemeral: true });
@@ -449,7 +449,8 @@ client.on('interactionCreate', async interaction => {
                         { name: '🛡️ Classes com Escudo', value: '• Medusa (Exceto Devo/CF) | Tatacho (ou Hodremlin) | Alice' },
                         { name: '🏹 Snipers', value: '• Dragon Wing (Nyd) | Arco da BG (Bio3)\n• 2k+ Immaterial Arrow | Falcon Assault na barra\n• 10 Conversores (Wind/Earth/Water) | 20+ Fire' },
                         { name: '🧪 Creator & Suportes', value: '• **Creator:** 150+ ADs | 30+ Glistening Coats\n• **HP:** 200+ Blue Gemstone | 50+ Holy Water\n• **Prof:** 150+ Blue Gemstone | 100+ Yellow Gemstone' }
-                    );
+                    )
+                    .setFooter({ text: '💡 Dica: Use o RODEX para enviar itens e economizar peso!' });
             }
 
             else if (dados.tipoInstancia === 'celine') {
@@ -460,7 +461,8 @@ client.on('interactionCreate', async interaction => {
                         { name: '🛡️ Essenciais para TODOS', value: '• 20+ Panaceas | 10 Folhas de Ygg\n• 5 Fireproof Potion | Itens de HP/SP' },
                         { name: '🎭 Suportes (HP/Bragi/Dancer)', value: '• Armadura com Pasana | Escudo com Medusa\n• Elmo com Nightmare (ou Pet Nightmare Terror)\n• **HP:** 150+ Blue Gemstone | 10+ Holy Water' },
                         { name: '🏹 Sniper', value: '• 1k Immaterial Arrow | Elmo com Nightmare\n• Sniper Suit com Pasana | Arco MVP Ghost (2 AK / 2 Mao Guai)' }
-                    );
+                    )
+                    .setFooter({ text: '💡 Dica: Use o RODEX para enviar itens e economizar peso!' });
             }
 
             else if (dados.tipoInstancia === 'galho') {
@@ -470,7 +472,8 @@ client.on('interactionCreate', async interaction => {
                     .addFields(
                         { name: '📦 Essenciais para TODOS', value: '• 25+ Panaceas | 2 Folhas de YGG\n• Itens de recuperação de SP' },
                         { name: '🧙 Suportes', value: '• **Prof:** 100+ Blue Gemstone | 100+ Yellow Gemstone | 50+ Cobweb\n• **HP:** 150+ Blue Gemstone' }
-                    );
+                    )
+                    .setFooter({ text: '💡 Dica: Use o RODEX para enviar itens e economizar peso!' });
             }
 
             await interaction.reply({ embeds: [embed] });
@@ -484,7 +487,7 @@ client.on('interactionCreate', async interaction => {
 
             if (!isDono && !isAdm) {
                 return interaction.reply({ 
-                    content: '❌ Apenas o **Líder da PT** que criou este tópico ou um **ADM** podem adicionar membros manualmente.', 
+                    content: '❌ Apenas o **Líder do Grupo** que criou este tópico ou um **ADM** podem adicionar membros manualmente.', 
                     ephemeral: true 
                 });
             }
