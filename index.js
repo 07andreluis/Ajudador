@@ -601,7 +601,9 @@ client.on('interactionCreate', async interaction => {
     if (interaction.isButton()) {
         const dados = await Instancia.findOne({ eventoId: canalId });
         if (!dados) return;
-
+        const tipoTecnico = dados.tipoInstancia?dados.tipoInstancia.toLowerCase():'et';
+        const infoInstancia = CONFIG_INSTANCIAS[tipoTecnico];
+        const limiteMaximo = infoInstancia?.limiteGrupo || 12;
         if (interaction.customId === 'sair') {
             dados.inscritos.forEach((l, k) => dados.inscritos.set(k, l.filter(id => id !== userId)));
         } else if (interaction.customId === 'reset') {
