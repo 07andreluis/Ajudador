@@ -312,7 +312,7 @@ client.once('ready', async () => {
             name: 'lider',
             description: 'Transfere a liderança da instância para outro jogador',
             options: [
-                { name: 'usuario', type: User, description: 'Selecione o novo líder do grupo', required: true }
+                { name: 'usuario', type: 6, description: 'Selecione o novo líder do grupo', required: true }
             ]
         }
     ];
