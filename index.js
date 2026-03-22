@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, User } = require('discord.js');
 const mongoose = require('mongoose');
 const http = require('http');
 
@@ -307,6 +307,13 @@ client.once('ready', async () => {
             options: [
                 { name: 'usuario', type: 6, description: 'Usuário a ser removido', required: true }
             ]
+        },
+        {
+            name: 'lider',
+            description: 'Transfere a liderança da instância para outro jogador',
+            options: [
+                { name: 'usuario', type: User, description: 'Selecione o novo líder do grupo', required: true }
+            ]
         }
     ];
 
@@ -317,6 +324,7 @@ client.once('ready', async () => {
 client.on('interactionCreate', async interaction => {
     const canalId = interaction.channel.id;
     const userId = `<@${interaction.user.id}>`;
+    const dados = await Instancia.findOne({ eventoId: canalId });
 
     if (interaction.isChatInputCommand()) {
         let dados = await Instancia.findOne({ eventoId: canalId });
@@ -598,6 +606,43 @@ client.on('interactionCreate', async interaction => {
                 .setFooter({ text: 'Sistema de Apoio ao Clã criado por André Luís' });
 
             await interaction.reply({ embeds: [embedAjuda], ephemeral: true });
+        }
+
+        if (interaction.commandName === 'lider') {
+            if (!dados) {
+                return interaction.reply({ content: '❌ Não há uma instância ativa neste tópico.', ephemeral: true });
+            }
+
+            const ehAdmin = interaction.member.permissions.has('Administrator');
+            const ehLiderAtual = interaction.user.id === dados.criadorId;
+
+            if (!ehAdmin && !ehLiderAtual) {
+                return interaction.reply({ 
+                    content: '❌ Apenas o Líder do Grupo ou um Administrador podem transferir a liderança.', 
+                    ephemeral: true 
+                });
+            }
+
+            const novoLider = interaction.options.getUser('usuario');
+
+            if (novoLider.id === dados.criadorId) {
+                return interaction.reply({ content: '❌ Este usuário já é o líder atual.', ephemeral: true });
+            }
+            if (novoLider.bot) {
+                return interaction.reply({ content: '❌ Você não pode transferir a liderança para um bot.', ephemeral: true });
+            }
+
+            dados.criadorId = novoLider.id;
+            await dados.save();
+
+            await interaction.reply({ 
+                content: `👑 **Transferência de Liderança**\nO usuário <@${interaction.user.id}> passou o comando do grupo para **${novoLider.username}**!` 
+            });
+
+            const embedAtualizado = await gerarEmbed(canalId);
+            await interaction.channel.messages.fetch(dados.painelId).then(msg => {
+                msg.edit({ embeds: [embedAtualizado] });
+            }).catch(err => console.log("Erro ao atualizar painel após troca de líder:", err));
         }
     }
 
